@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}{{ podcast.name }} - PodClean{% endblock %}
+
+{% block content %}
+<h2>
+    {{ podcast.name }}
+    {% if podcast.enabled %}
+    <span class="badge badge-enabled">Enabled</span>
+    {% else %}
+    <span class="badge badge-disabled">Disabled</span>
+    {% endif %}
+</h2>
+
+<div class="card">
+    <p><strong>Source URL:</strong> <a href="{{ podcast.url }}" target="_blank">{{ podcast.url }}</a></p>
+    <p><strong>Type:</strong> {{ podcast.podcast_type.value|upper }}</p>
+    <div class="feed-url">
+        <strong>Feed URL (for Pocket Casts):</strong><br>
+        <a href="{{ feed_url }}">{{ feed_url }}</a>
+    </div>
+</div>
+
+<h3>Episodes</h3>
+
+{% if episodes %}
+<div class="card" style="padding: 0; overflow: hidden;">
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Ads Removed</th>
+                <th>Processed</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for episode in episodes %}
+            <tr>
+                <td>
+                    {{ episode.title[:60] }}{% if episode.title|length > 60 %}...{% endif %}
+                    {% if episode.published_at %}
+                    <br><small style="color: #666;">{{ episode.published_at.strftime('%Y-%m-%d') }}</small>
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="status-{{ episode.status.value }}">
+                        {{ episode.status.value.replace('_', ' ').title() }}
+                    </span>
+                    {% if episode.error_message %}
+                    <br><small style="color: #cc3333;">{{ episode.error_message[:50] }}</small>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if episode.status.value == 'completed' %}
+                    {{ episode.ads_removed_count }} ({{ episode.ads_removed_seconds }}s)
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td>
+                    {% if episode.processed_at %}
+                    {{ episode.processed_at.strftime('%Y-%m-%d %H:%M') }}
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card">
+    <div class="empty">
+        <p>No episodes yet. Episodes will appear after the next scheduled run.</p>
+    </div>
+</div>
+{% endif %}
+
+<p><a href="/">&larr; Back to Dashboard</a></p>
+{% endblock %}

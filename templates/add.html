@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Add Podcast - PodClean{% endblock %}
+
+{% block content %}
+<h2>Add Podcast</h2>
+
+<div class="card">
+    <form action="/add" method="post">
+        <div class="form-group">
+            <label for="name">Podcast Name</label>
+            <input type="text" id="name" name="name" required placeholder="e.g., Huberman Lab">
+        </div>
+
+        <div class="form-group">
+            <label for="url">Feed URL</label>
+            <input type="url" id="url" name="url" required placeholder="https://...">
+            <small style="color: #666; display: block; margin-top: 5px;">
+                For RSS: Use the podcast RSS feed URL<br>
+                For YouTube: Use a channel or playlist URL
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="podcast_type">Type</label>
+            <select id="podcast_type" name="podcast_type" required>
+                <option value="rss">RSS Feed</option>
+                <option value="youtube">YouTube</option>
+            </select>
+        </div>
+
+        <div class="actions">
+            <button type="submit" class="btn">Add Podcast</button>
+            <a href="/" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

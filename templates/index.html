@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}PodClean - Dashboard{% endblock %}
+
+{% block content %}
+<h2>Podcasts</h2>
+
+{% if podcasts %}
+    {% for item in podcasts %}
+    <div class="card">
+        <div class="card-header">
+            <h3>
+                <a href="/podcast/{{ item.podcast.id }}">{{ item.podcast.name }}</a>
+                {% if item.podcast.enabled %}
+                <span class="badge badge-enabled">Enabled</span>
+                {% else %}
+                <span class="badge badge-disabled">Disabled</span>
+                {% endif %}
+                <span class="badge badge-{{ item.podcast.podcast_type.value }}">{{ item.podcast.podcast_type.value|upper }}</span>
+            </h3>
+            <div class="actions">
+                <form action="/podcast/{{ item.podcast.id }}/toggle" method="post" style="display: inline;">
+                    <button type="submit" class="btn btn-secondary btn-small">
+                        {% if item.podcast.enabled %}Disable{% else %}Enable{% endif %}
+                    </button>
+                </form>
+                <form action="/podcast/{{ item.podcast.id }}/delete" method="post" style="display: inline;"
+                      onsubmit="return confirm('Delete this podcast and all episodes?');">
+                    <button type="submit" class="btn btn-danger btn-small">Delete</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="stats">
+            <span class="stat stat-success">{{ item.completed }} completed</span>
+            {% if item.processing > 0 %}
+            <span class="stat stat-warning">{{ item.processing }} processing</span>
+            {% endif %}
+            {% if item.failed > 0 %}
+            <span class="stat stat-danger">{{ item.failed }} failed</span>
+            {% endif %}
+        </div>
+
+        <div class="feed-url">
+            <strong>Feed URL:</strong> <a href="{{ item.feed_url }}">{{ item.feed_url }}</a>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="card">
+        <div class="empty">
+            <p>No podcasts added yet.</p>
+            <a href="/add" class="btn">Add Your First Podcast</a>
+        </div>
+    </div>
+{% endif %}
+
+{% endblock %}

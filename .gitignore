@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+
+# Data directories (contain downloaded/processed files)
+data/downloads/
+data/processed/
+data/transcripts/
+data/*.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+
+# Docker
+.docker/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
