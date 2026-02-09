@@ -40,7 +40,7 @@ A self-hosted podcast processor that automatically downloads podcasts from RSS f
 ### Manual Docker Setup
 
 ```bash
-git clone https://github.com/<your-username>/podclean.git
+git clone https://github.com/ryan-lowry/podclean.git
 cd podclean
 cp .env.example .env
 # Edit .env with your settings
