@@ -79,7 +79,9 @@ def transcribe_audio(audio_path: str) -> Transcript:
     """
     model = get_model()
 
-    logger.info(f"Transcribing: {audio_path}")
+    # Get audio duration for progress tracking
+    audio_filename = os.path.basename(audio_path)
+    logger.info(f"Starting transcription: {audio_filename}")
 
     segments_result, info = model.transcribe(
         audio_path,
@@ -92,7 +94,14 @@ def transcribe_audio(audio_path: str) -> Transcript:
     )
 
     segments = []
+    last_logged_minute = 0
     for segment in segments_result:
+        # Log progress every minute of audio processed
+        current_minute = int(segment.end // 60)
+        if current_minute > last_logged_minute and current_minute % 2 == 0:
+            logger.info(f"Transcribing... {current_minute} minutes processed")
+            last_logged_minute = current_minute
+
         segments.append(
             TranscriptSegment(
                 start=segment.start,

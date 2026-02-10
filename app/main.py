@@ -97,11 +97,10 @@ logging.getLogger().addHandler(buffering_handler)
 
 async def run_pipeline_background():
     """Run the pipeline in background."""
-    if pipeline_state.is_running:
-        logger.warning("Pipeline already running, skipping")
-        return
+    # State may already be set by trigger_run, but ensure it's set for scheduled runs
+    if not pipeline_state.is_running:
+        pipeline_state.start()
 
-    pipeline_state.start()
     try:
         async with async_session() as db:
             await run_pipeline(db, status_callback=pipeline_state.update)
@@ -303,6 +302,8 @@ async def trigger_run():
         logger.warning("Pipeline already running")
     else:
         logger.info("Manual pipeline run triggered")
+        # Set state immediately so UI shows it before redirect
+        pipeline_state.start()
         asyncio.create_task(run_pipeline_background())
     return RedirectResponse(url="/", status_code=303)
 

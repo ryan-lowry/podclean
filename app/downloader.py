@@ -151,6 +151,34 @@ def get_episode_list(podcast: Podcast, limit: int = 5) -> list[EpisodeInfo]:
     return episodes
 
 
+def _make_progress_hook(episode_title: str):
+    """Create a progress hook that logs download progress."""
+    last_percent = [0]  # Use list to allow mutation in closure
+
+    def hook(d):
+        if d['status'] == 'downloading':
+            percent = d.get('_percent_str', '?%').strip()
+            speed = d.get('_speed_str', '?').strip()
+            eta = d.get('_eta_str', '?').strip()
+
+            # Only log every 10% to avoid spam
+            try:
+                current = int(float(percent.replace('%', '')))
+                if current >= last_percent[0] + 10 or current == 100:
+                    logger.info(f"Downloading {episode_title[:30]}... {percent} at {speed}, ETA: {eta}")
+                    last_percent[0] = current
+            except (ValueError, TypeError):
+                pass
+
+        elif d['status'] == 'finished':
+            logger.info(f"Download complete: {episode_title[:40]}, converting to MP3...")
+
+        elif d['status'] == 'error':
+            logger.error(f"Download error: {episode_title}")
+
+    return hook
+
+
 def download_episode(
     podcast: Podcast,
     episode_info: EpisodeInfo,
@@ -173,11 +201,14 @@ def download_episode(
     filename = sanitize_filename(f"{episode_info.source_id}_{episode_info.title}")
     output_template = os.path.join(podcast_dir, f"{filename}.%(ext)s")
 
+    logger.info(f"Starting download: {episode_info.title}")
+
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": output_template,
         "quiet": True,
         "no_warnings": True,
+        "progress_hooks": [_make_progress_hook(episode_info.title)],
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
