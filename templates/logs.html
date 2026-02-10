@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Logs - PodClean{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2>Logs</h2>
+    <label style="display: flex; align-items: center; gap: 8px;">
+        <input type="checkbox" id="auto-refresh" checked>
+        Auto-refresh
+    </label>
+</div>
+
+<div class="card" style="padding: 0;">
+    <div id="log-container" style="max-height: 600px; overflow-y: auto; font-family: monospace; font-size: 13px;">
+        <table style="margin: 0;">
+            <thead>
+                <tr>
+                    <th style="width: 160px;">Time</th>
+                    <th style="width: 80px;">Level</th>
+                    <th>Message</th>
+                </tr>
+            </thead>
+            <tbody id="log-body">
+                {% for log in logs %}
+                <tr class="log-{{ log.level|lower }}">
+                    <td style="white-space: nowrap;">{{ log.time }}</td>
+                    <td>{{ log.level }}</td>
+                    <td style="word-break: break-word;">{{ log.message }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" style="text-align: center; color: #666; padding: 40px;">
+                        No logs yet. Logs will appear when processing starts.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    .log-info td { color: #333; }
+    .log-warning td { color: #cc8800; }
+    .log-error td { color: #cc3333; }
+    .log-debug td { color: #666; }
+    #log-body tr:hover { background: #f5f5f5; }
+</style>
+
+<script>
+let autoRefresh = true;
+let refreshInterval = null;
+
+document.getElementById('auto-refresh').addEventListener('change', function() {
+    autoRefresh = this.checked;
+    if (autoRefresh) {
+        startRefresh();
+    } else {
+        stopRefresh();
+    }
+});
+
+function updateLogs() {
+    if (!autoRefresh) return;
+
+    fetch('/api/logs')
+        .then(response => response.json())
+        .then(data => {
+            const tbody = document.getElementById('log-body');
+            if (data.logs.length === 0) return;
+
+            tbody.innerHTML = data.logs.map(log => `
+                <tr class="log-${log.level.toLowerCase()}">
+                    <td style="white-space: nowrap;">${log.time}</td>
+                    <td>${log.level}</td>
+                    <td style="word-break: break-word;">${log.message}</td>
+                </tr>
+            `).join('');
+        })
+        .catch(err => console.error('Log fetch error:', err));
+}
+
+function startRefresh() {
+    if (refreshInterval) return;
+    refreshInterval = setInterval(updateLogs, 2000);
+}
+
+function stopRefresh() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+    }
+}
+
+// Start auto-refresh
+startRefresh();
+</script>
+
+{% endblock %}

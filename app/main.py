@@ -1,11 +1,14 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI, Request, Depends, Form, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from slugify import slugify
@@ -28,12 +31,90 @@ logger = logging.getLogger(__name__)
 # Scheduler
 scheduler = AsyncIOScheduler()
 
+# Pipeline state tracking
+class PipelineState:
+    def __init__(self):
+        self.is_running = False
+        self.started_at: Optional[datetime] = None
+        self.current_task: str = ""
+
+    def start(self):
+        self.is_running = True
+        self.started_at = datetime.utcnow()
+        self.current_task = "Starting..."
+
+    def update(self, task: str):
+        self.current_task = task
+
+    def stop(self):
+        self.is_running = False
+        self.started_at = None
+        self.current_task = ""
+
+pipeline_state = PipelineState()
+
+
+# In-memory log storage
+class LogBuffer:
+    def __init__(self, max_entries: int = 200):
+        self.entries: list[dict] = []
+        self.max_entries = max_entries
+
+    def add(self, level: str, message: str, name: str):
+        self.entries.append({
+            "time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            "level": level,
+            "name": name,
+            "message": message,
+        })
+        # Keep only last N entries
+        if len(self.entries) > self.max_entries:
+            self.entries = self.entries[-self.max_entries:]
+
+    def get_entries(self) -> list[dict]:
+        return list(reversed(self.entries))  # Most recent first
+
+
+log_buffer = LogBuffer()
+
+
+class BufferingHandler(logging.Handler):
+    """Custom log handler that stores entries in memory."""
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            log_buffer.add(record.levelname, msg, record.name)
+        except Exception:
+            pass
+
+
+# Add buffering handler to root logger
+buffering_handler = BufferingHandler()
+buffering_handler.setLevel(logging.INFO)
+buffering_handler.setFormatter(logging.Formatter("%(message)s"))
+logging.getLogger().addHandler(buffering_handler)
+
+
+async def run_pipeline_background():
+    """Run the pipeline in background."""
+    if pipeline_state.is_running:
+        logger.warning("Pipeline already running, skipping")
+        return
+
+    pipeline_state.start()
+    try:
+        async with async_session() as db:
+            await run_pipeline(db, status_callback=pipeline_state.update)
+    except Exception as e:
+        logger.error(f"Pipeline error: {e}")
+    finally:
+        pipeline_state.stop()
+
 
 async def scheduled_pipeline_run():
     """Run the pipeline on schedule."""
     logger.info("Scheduled pipeline run starting")
-    async with async_session() as db:
-        await run_pipeline(db)
+    await run_pipeline_background()
 
 
 @asynccontextmanager
@@ -111,6 +192,8 @@ async def index(request: Request, db: AsyncSession = Depends(get_db)):
             "request": request,
             "podcasts": podcast_data,
             "base_url": settings.base_url,
+            "pipeline_running": pipeline_state.is_running,
+            "pipeline_task": pipeline_state.current_task,
         },
     )
 
@@ -214,11 +297,36 @@ async def podcast_detail(
 
 
 @app.post("/run")
-async def trigger_run(db: AsyncSession = Depends(get_db)):
+async def trigger_run():
     """Manually trigger a pipeline run."""
-    logger.info("Manual pipeline run triggered")
-    stats = await run_pipeline(db)
+    if pipeline_state.is_running:
+        logger.warning("Pipeline already running")
+    else:
+        logger.info("Manual pipeline run triggered")
+        asyncio.create_task(run_pipeline_background())
     return RedirectResponse(url="/", status_code=303)
+
+
+@app.get("/api/status")
+async def get_status(db: AsyncSession = Depends(get_db)):
+    """Get current pipeline status for AJAX updates."""
+    # Get processing episodes
+    result = await db.execute(
+        select(Episode).where(
+            Episode.status.not_in([EpisodeStatus.COMPLETED, EpisodeStatus.FAILED])
+        )
+    )
+    processing_episodes = list(result.scalars().all())
+
+    return JSONResponse({
+        "running": pipeline_state.is_running,
+        "task": pipeline_state.current_task,
+        "processing_count": len(processing_episodes),
+        "processing_episodes": [
+            {"title": e.title[:50], "status": e.status.value}
+            for e in processing_episodes[:5]
+        ],
+    })
 
 
 # --- Feed & Episode Routes ---
@@ -244,6 +352,31 @@ async def get_episode(podcast_slug: str, filename: str):
         raise HTTPException(status_code=404, detail="Episode not found")
 
     return FileResponse(file_path, media_type="audio/mpeg")
+
+
+# --- Logs ---
+
+
+@app.get("/logs", response_class=HTMLResponse)
+async def view_logs(request: Request):
+    """View application logs."""
+    return templates.TemplateResponse(
+        "logs.html",
+        {
+            "request": request,
+            "logs": log_buffer.get_entries(),
+            "pipeline_running": pipeline_state.is_running,
+        },
+    )
+
+
+@app.get("/api/logs")
+async def get_logs():
+    """Get logs as JSON for AJAX updates."""
+    return JSONResponse({
+        "logs": log_buffer.get_entries()[:50],
+        "running": pipeline_state.is_running,
+    })
 
 
 # --- Health Check ---

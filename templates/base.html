@@ -168,12 +168,34 @@
             color: #666;
             padding: 40px;
         }
+        .status-banner {
+            background: #0066cc;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .status-spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <h1><a href="/" style="color: inherit;">PodClean</a></h1>
         <div class="actions">
+            <a href="/logs" class="btn btn-secondary">Logs</a>
             <form action="/run" method="post" style="display: inline;">
                 <button type="submit" class="btn btn-secondary">Run Now</button>
             </form>

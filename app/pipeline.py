@@ -1,7 +1,7 @@
 import logging
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Callable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,19 +17,32 @@ from app.cleanup import cleanup_old_episodes
 
 logger = logging.getLogger(__name__)
 
+# Type for status callback
+StatusCallback = Optional[Callable[[str], None]]
 
-async def process_podcast(db: AsyncSession, podcast: Podcast) -> int:
+
+async def process_podcast(
+    db: AsyncSession,
+    podcast: Podcast,
+    status_callback: StatusCallback = None,
+) -> int:
     """
     Process a single podcast: download, transcribe, remove ads.
 
     Args:
         db: Database session
         podcast: Podcast to process
+        status_callback: Optional callback to report status updates
 
     Returns:
         Number of episodes processed
     """
+    def update_status(msg: str):
+        if status_callback:
+            status_callback(msg)
+
     logger.info(f"Processing podcast: {podcast.name}")
+    update_status(f"Processing: {podcast.name}")
     processed_count = 0
 
     # Get list of available episodes
@@ -65,6 +78,7 @@ async def process_podcast(db: AsyncSession, podcast: Podcast) -> int:
             # Download
             episode.status = EpisodeStatus.DOWNLOADING
             await db.commit()
+            update_status(f"Downloading: {episode_info.title[:40]}...")
 
             downloaded_path = download_episode(podcast, episode_info)
             if not downloaded_path:
@@ -75,6 +89,7 @@ async def process_podcast(db: AsyncSession, podcast: Podcast) -> int:
             # Transcribe
             episode.status = EpisodeStatus.TRANSCRIBING
             await db.commit()
+            update_status(f"Transcribing: {episode_info.title[:40]}...")
 
             # Check for SponsorBlock data first (YouTube only)
             youtube_video_id = None
@@ -97,6 +112,7 @@ async def process_podcast(db: AsyncSession, podcast: Podcast) -> int:
             # Detect ads
             episode.status = EpisodeStatus.DETECTING_ADS
             await db.commit()
+            update_status(f"Detecting ads: {episode_info.title[:40]}...")
 
             ad_segments = detect_ads(
                 transcript=transcript,
@@ -110,6 +126,7 @@ async def process_podcast(db: AsyncSession, podcast: Podcast) -> int:
             # Process audio
             episode.status = EpisodeStatus.PROCESSING_AUDIO
             await db.commit()
+            update_status(f"Processing audio: {episode_info.title[:40]}...")
 
             output_dir = os.path.join(settings.processed_dir, podcast.slug)
             os.makedirs(output_dir, exist_ok=True)
@@ -136,6 +153,7 @@ async def process_podcast(db: AsyncSession, podcast: Podcast) -> int:
                 f"Completed: {episode.title} "
                 f"(removed {count} ads, {seconds}s)"
             )
+            update_status(f"Completed: {episode_info.title[:40]}")
 
         except Exception as e:
             logger.error(f"Error processing {episode_info.title}: {e}")
@@ -146,14 +164,26 @@ async def process_podcast(db: AsyncSession, podcast: Podcast) -> int:
     return processed_count
 
 
-async def run_pipeline(db: AsyncSession) -> dict:
+async def run_pipeline(
+    db: AsyncSession,
+    status_callback: StatusCallback = None,
+) -> dict:
     """
     Run the full processing pipeline for all enabled podcasts.
+
+    Args:
+        db: Database session
+        status_callback: Optional callback to report status updates
 
     Returns:
         Summary statistics
     """
+    def update_status(msg: str):
+        if status_callback:
+            status_callback(msg)
+
     logger.info("Starting pipeline run")
+    update_status("Starting pipeline...")
     start_time = datetime.utcnow()
 
     stats = {
@@ -170,11 +200,12 @@ async def run_pipeline(db: AsyncSession) -> dict:
     podcasts = list(result.scalars().all())
 
     logger.info(f"Found {len(podcasts)} enabled podcasts")
+    update_status(f"Found {len(podcasts)} podcasts")
 
     for podcast in podcasts:
         try:
             # Process new episodes
-            processed = await process_podcast(db, podcast)
+            processed = await process_podcast(db, podcast, status_callback)
             stats["episodes_processed"] += processed
             stats["podcasts_processed"] += 1
 

@@ -3,6 +3,14 @@
 {% block title %}PodClean - Dashboard{% endblock %}
 
 {% block content %}
+
+{% if pipeline_running %}
+<div class="status-banner" id="status-banner">
+    <div class="status-spinner"></div>
+    <span id="status-text">{{ pipeline_task or "Processing..." }}</span>
+</div>
+{% endif %}
+
 <h2>Podcasts</h2>
 
 {% if podcasts %}
@@ -54,5 +62,44 @@
         </div>
     </div>
 {% endif %}
+
+<script>
+// Poll for status updates when pipeline is running
+let isRunning = {{ 'true' if pipeline_running else 'false' }};
+let pollInterval = null;
+
+function updateStatus() {
+    fetch('/api/status')
+        .then(response => response.json())
+        .then(data => {
+            const banner = document.getElementById('status-banner');
+            const statusText = document.getElementById('status-text');
+
+            if (data.running) {
+                if (!banner) {
+                    // Reload page to show banner
+                    location.reload();
+                } else {
+                    statusText.textContent = data.task || 'Processing...';
+                }
+                isRunning = true;
+            } else {
+                if (isRunning) {
+                    // Was running, now stopped - reload to update counts
+                    location.reload();
+                }
+                isRunning = false;
+            }
+        })
+        .catch(err => console.error('Status poll error:', err));
+}
+
+if (isRunning) {
+    pollInterval = setInterval(updateStatus, 2000);
+} else {
+    // Check occasionally in case a scheduled run starts
+    pollInterval = setInterval(updateStatus, 10000);
+}
+</script>
 
 {% endblock %}
