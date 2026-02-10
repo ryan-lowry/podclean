@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models import Podcast, Episode, EpisodeStatus, PodcastType
+from app.models import Podcast, Episode, EpisodeStatus, PodcastType, Settings
 from app.downloader import get_episode_list, download_episode, get_youtube_video_id
 from app.transcriber import transcribe_audio, save_transcript
 from app.ad_detector import detect_ads, calculate_ad_stats
@@ -45,8 +45,11 @@ async def process_podcast(
     update_status(f"Processing: {podcast.name}")
     processed_count = 0
 
+    # Get download check limit from database settings
+    download_check_limit = await Settings.get_int(db, "download_check_limit")
+
     # Get list of available episodes
-    episodes = get_episode_list(podcast, limit=settings.download_check_limit)
+    episodes = get_episode_list(podcast, limit=download_check_limit)
     logger.info(f"Found {len(episodes)} recent episodes for {podcast.name}")
 
     for episode_info in episodes:

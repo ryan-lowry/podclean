@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - PodClean{% endblock %}
+
+{% block content %}
+<h2>Settings</h2>
+
+<div class="card">
+    <form action="/settings" method="post">
+        {% for key, setting in settings.items() %}
+        <div class="form-group">
+            <label for="{{ key }}">{{ setting.description }}</label>
+            <input type="number" id="{{ key }}" name="{{ key }}"
+                   value="{{ setting.value }}" min="1" max="100" required>
+        </div>
+        {% endfor %}
+
+        <div style="margin-top: 20px;">
+            <button type="submit" class="btn">Save Settings</button>
+        </div>
+    </form>
+</div>
+
+<div class="card" style="margin-top: 20px;">
+    <h3 style="margin-top: 0;">Setting Descriptions</h3>
+    <table>
+        <tbody>
+            <tr>
+                <td><strong>Episodes to keep</strong></td>
+                <td>Maximum number of processed episodes to retain per podcast. Older episodes are automatically deleted.</td>
+            </tr>
+            <tr>
+                <td><strong>Download check limit</strong></td>
+                <td>Number of recent episodes to check from each feed per pipeline run. Higher values find more episodes but take longer.</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}

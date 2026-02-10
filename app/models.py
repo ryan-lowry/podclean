@@ -42,6 +42,52 @@ class Podcast(Base):
         return f"<Podcast {self.name}>"
 
 
+class Settings(Base):
+    __tablename__ = "settings"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(String(500))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Default settings
+    DEFAULTS = {
+        "episodes_to_keep": ("10", "Number of episodes to keep per podcast"),
+        "download_check_limit": ("5", "Number of recent episodes to check per run"),
+    }
+
+    @classmethod
+    async def get(cls, db, key: str) -> str:
+        """Get a setting value, returning default if not set."""
+        from sqlalchemy import select
+        result = await db.execute(select(cls).where(cls.key == key))
+        setting = result.scalar_one_or_none()
+        if setting:
+            return setting.value
+        return cls.DEFAULTS.get(key, ("", ""))[0]
+
+    @classmethod
+    async def get_int(cls, db, key: str) -> int:
+        """Get a setting as an integer."""
+        value = await cls.get(db, key)
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return int(cls.DEFAULTS.get(key, ("0", ""))[0])
+
+    @classmethod
+    async def set(cls, db, key: str, value: str):
+        """Set a setting value."""
+        from sqlalchemy import select
+        result = await db.execute(select(cls).where(cls.key == key))
+        setting = result.scalar_one_or_none()
+        if setting:
+            setting.value = value
+        else:
+            desc = cls.DEFAULTS.get(key, ("", ""))[1]
+            db.add(cls(key=key, value=value, description=desc))
+        await db.commit()
+
+
 class Episode(Base):
     __tablename__ = "episodes"
 

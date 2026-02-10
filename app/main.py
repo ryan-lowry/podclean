@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import init_db, get_db, async_session
-from app.models import Podcast, Episode, PodcastType, EpisodeStatus
+from app.models import Podcast, Episode, PodcastType, EpisodeStatus, Settings
 from app.pipeline import run_pipeline
 from app.feed_generator import generate_index_page
 
@@ -381,6 +381,49 @@ async def get_logs():
 
 
 # --- Health Check ---
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request, db: AsyncSession = Depends(get_db)):
+    """Settings page."""
+    # Get current settings with defaults
+    current_settings = {}
+    for key, (default_val, description) in Settings.DEFAULTS.items():
+        value = await Settings.get(db, key)
+        current_settings[key] = {
+            "value": value,
+            "description": description,
+        }
+
+    return templates.TemplateResponse(
+        "settings.html",
+        {
+            "request": request,
+            "settings": current_settings,
+        },
+    )
+
+
+@app.post("/settings")
+async def save_settings(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Save settings."""
+    form_data = await request.form()
+
+    for key in Settings.DEFAULTS.keys():
+        if key in form_data:
+            value = form_data[key]
+            # Validate integer settings
+            try:
+                int(value)
+                await Settings.set(db, key, value)
+            except ValueError:
+                logger.warning(f"Invalid value for {key}: {value}")
+
+    logger.info("Settings saved")
+    return RedirectResponse(url="/settings", status_code=303)
 
 
 @app.get("/health")

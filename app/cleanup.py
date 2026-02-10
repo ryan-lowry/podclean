@@ -6,7 +6,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models import Podcast, Episode, EpisodeStatus
+from app.models import Podcast, Episode, EpisodeStatus, Settings
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +34,14 @@ async def cleanup_old_episodes(db: AsyncSession, podcast: Podcast) -> int:
     result = await db.execute(query)
     episodes = list(result.scalars().all())
 
-    if len(episodes) <= settings.episodes_to_keep:
+    # Get episodes to keep from database settings
+    episodes_to_keep = await Settings.get_int(db, "episodes_to_keep")
+
+    if len(episodes) <= episodes_to_keep:
         return 0
 
     # Episodes to remove (beyond retention limit)
-    episodes_to_remove = episodes[settings.episodes_to_keep:]
+    episodes_to_remove = episodes[episodes_to_keep:]
     removed_count = 0
 
     for episode in episodes_to_remove:
