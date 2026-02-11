@@ -27,16 +27,24 @@ class Settings(BaseSettings):
     # How many recent episodes to check per podcast when downloading
     download_check_limit: int = 5
 
-    # Default ad patterns (regex, case-insensitive)
+    # Ollama settings for LLM-based ad detection
+    ollama_url: str = os.getenv("OLLAMA_URL", "http://ollama:11434")
+    ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+    use_llm_detection: bool = os.getenv("USE_LLM_DETECTION", "true").lower() == "true"
+
+    # Default ad patterns (regex, case-insensitive) - fallback if LLM unavailable
     default_ad_patterns: list[str] = [
         r"this (?:episode|podcast) is (?:brought to you|sponsored) by",
         r"thanks to .+ for sponsoring",
+        r"thank (?:the|our) sponsor",
         r"use (?:code|promo) .+ (?:for|to get) .+ (?:off|discount)",
         r"go to .+\.com\/[a-z]+",
         r"let me tell you about",
         r"today's sponsor",
         r"this show is supported by",
-        r"a]and now a word from our sponsor",
+        r"and now a word from our sponsor",
+        r"(?:quick|short) break",
+        r"back to the (?:show|episode|podcast)",
     ]
 
     class Config:
