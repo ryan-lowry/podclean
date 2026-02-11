@@ -333,7 +333,7 @@ async def get_status(db: AsyncSession = Depends(get_db)):
 # --- Feed & Episode Routes ---
 
 
-@app.get("/feeds/{slug}.xml")
+@app.api_route("/feeds/{slug}.xml", methods=["GET", "HEAD"])
 async def get_feed(slug: str):
     """Serve a podcast RSS feed."""
     feed_path = os.path.join(settings.processed_dir, "feeds", f"{slug}.xml")
@@ -344,7 +344,7 @@ async def get_feed(slug: str):
     return FileResponse(feed_path, media_type="application/rss+xml")
 
 
-@app.get("/episodes/{podcast_slug}/{filename}")
+@app.api_route("/episodes/{podcast_slug}/{filename}", methods=["GET", "HEAD"])
 async def get_episode(podcast_slug: str, filename: str):
     """Serve an episode audio file."""
     file_path = os.path.join(settings.processed_dir, podcast_slug, filename)
