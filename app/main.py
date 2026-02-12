@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import init_db, get_db, async_session
 from app.models import Podcast, Episode, PodcastType, EpisodeStatus, Settings
-from app.pipeline import run_pipeline
+from app.pipeline import run_pipeline, reprocess_episode
 from app.feed_generator import generate_index_page
 
 # Configure logging
@@ -261,6 +261,49 @@ async def toggle_podcast(podcast_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/episode/{episode_id}/reprocess")
+async def reprocess_episode_endpoint(episode_id: int, db: AsyncSession = Depends(get_db)):
+    """Reprocess an episode with new ad detection."""
+    result = await db.execute(select(Episode).where(Episode.id == episode_id))
+    episode = result.scalar_one_or_none()
+
+    if not episode:
+        raise HTTPException(status_code=404, detail="Episode not found")
+
+    # Get the podcast
+    podcast_result = await db.execute(select(Podcast).where(Podcast.id == episode.podcast_id))
+    podcast = podcast_result.scalar_one_or_none()
+
+    if not podcast:
+        raise HTTPException(status_code=404, detail="Podcast not found")
+
+    # Run reprocessing in background
+    async def run_reprocess():
+        async with async_session() as reprocess_db:
+            # Re-fetch episode and podcast in this session
+            ep_result = await reprocess_db.execute(select(Episode).where(Episode.id == episode_id))
+            ep = ep_result.scalar_one_or_none()
+            pod_result = await reprocess_db.execute(select(Podcast).where(Podcast.id == episode.podcast_id))
+            pod = pod_result.scalar_one_or_none()
+            if ep and pod:
+                await reprocess_episode(reprocess_db, ep, pod)
+                # Regenerate feed after reprocessing
+                from app.feed_generator import save_feed
+                episodes_result = await reprocess_db.execute(
+                    select(Episode)
+                    .where(Episode.podcast_id == pod.id)
+                    .where(Episode.status == EpisodeStatus.COMPLETED)
+                    .order_by(Episode.published_at.desc().nullslast())
+                )
+                episodes = list(episodes_result.scalars().all())
+                save_feed(pod, episodes)
+
+    logger.info(f"Starting reprocess for episode: {episode.title}")
+    asyncio.create_task(run_reprocess())
+
+    return RedirectResponse(url=f"/podcast/{podcast.id}", status_code=303)
 
 
 @app.get("/podcast/{podcast_id}", response_class=HTMLResponse)

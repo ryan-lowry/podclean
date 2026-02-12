@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models import Podcast, Episode, EpisodeStatus, PodcastType, Settings
 from app.downloader import get_episode_list, download_episode, get_youtube_video_id, download_podcast_thumbnail
-from app.transcriber import transcribe_audio, save_transcript
+from app.transcriber import transcribe_audio, save_transcript, load_transcript
 from app.ad_detector import detect_ads, calculate_ad_stats
 from app.audio_processor import remove_segments, cleanup_original
 from app.feed_generator import save_feed
@@ -173,6 +173,110 @@ async def process_podcast(
             await db.commit()
 
     return processed_count
+
+
+async def reprocess_episode(
+    db: AsyncSession,
+    episode: Episode,
+    podcast: Podcast,
+) -> bool:
+    """
+    Reprocess an existing episode with new ad detection.
+
+    Skips download and transcription - uses existing transcript.
+    Re-runs ad detection (LLM) and audio processing.
+
+    Args:
+        db: Database session
+        episode: Episode to reprocess
+        podcast: The podcast this episode belongs to
+
+    Returns:
+        True if successful, False otherwise
+    """
+    logger.info(f"Reprocessing episode: {episode.title}")
+
+    try:
+        # Load existing transcript
+        if not episode.transcript_file:
+            raise Exception("No transcript file found")
+
+        transcript = load_transcript(episode.transcript_file)
+        if not transcript:
+            raise Exception("Failed to load transcript")
+
+        # Get YouTube video ID if applicable
+        youtube_video_id = None
+        if podcast.podcast_type == PodcastType.YOUTUBE:
+            youtube_video_id = get_youtube_video_id(episode.original_url)
+
+        # Re-run ad detection (will use LLM if available)
+        episode.status = EpisodeStatus.DETECTING_ADS
+        await db.commit()
+
+        ad_segments = detect_ads(
+            transcript=transcript,
+            youtube_video_id=youtube_video_id,
+        )
+
+        count, seconds = calculate_ad_stats(ad_segments)
+        episode.ads_removed_count = count
+        episode.ads_removed_seconds = seconds
+
+        logger.info(f"Reprocess detected {count} ads ({seconds}s)")
+
+        # Re-process audio
+        episode.status = EpisodeStatus.PROCESSING_AUDIO
+        await db.commit()
+
+        # We need to re-download to re-process since original was deleted
+        # Check if we still have the processed file to work from
+        output_dir = os.path.join(settings.processed_dir, podcast.slug)
+        output_filename = f"{episode.source_id}.mp3"
+        output_path = os.path.join(output_dir, output_filename)
+
+        # For reprocessing, we need the original audio
+        # Re-download it temporarily
+        from app.downloader import download_episode, EpisodeInfo
+
+        episode_info = EpisodeInfo(
+            source_id=episode.source_id,
+            title=episode.title,
+            url=episode.original_url,
+            published_at=episode.published_at,
+            duration_seconds=episode.duration_seconds,
+        )
+
+        logger.info(f"Re-downloading for reprocess: {episode.title}")
+        downloaded_path = download_episode(podcast, episode_info)
+        if not downloaded_path:
+            raise Exception("Re-download failed")
+
+        # Process audio with new ad segments
+        from app.audio_processor import remove_segments, cleanup_original
+
+        success = remove_segments(downloaded_path, output_path, ad_segments)
+        if not success:
+            raise Exception("Audio processing failed")
+
+        # Cleanup the re-downloaded file
+        cleanup_original(downloaded_path)
+
+        # Mark as completed
+        episode.status = EpisodeStatus.COMPLETED
+        episode.processed_at = datetime.utcnow()
+        episode.error_message = None
+        await db.commit()
+
+        logger.info(f"Reprocess complete: {episode.title} (removed {count} ads, {seconds}s)")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error reprocessing {episode.title}: {e}")
+        episode.status = EpisodeStatus.FAILED
+        episode.error_message = str(e)
+        await db.commit()
+        return False
 
 
 async def run_pipeline(
