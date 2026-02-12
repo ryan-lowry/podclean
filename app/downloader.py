@@ -257,3 +257,67 @@ def get_youtube_video_id(url: str) -> Optional[str]:
         if match:
             return match.group(1)
     return None
+
+
+def download_podcast_thumbnail(podcast: Podcast) -> Optional[str]:
+    """
+    Download the thumbnail/artwork for a podcast.
+
+    For YouTube channels, downloads the channel avatar.
+    For RSS feeds, extracts the podcast artwork URL.
+
+    Args:
+        podcast: The podcast to get thumbnail for
+
+    Returns:
+        Path to the downloaded thumbnail, or None if failed
+    """
+    # Create thumbnails directory
+    thumbnails_dir = os.path.join(settings.processed_dir, "thumbnails")
+    os.makedirs(thumbnails_dir, exist_ok=True)
+
+    output_path = os.path.join(thumbnails_dir, f"{podcast.slug}")
+
+    try:
+        # Normalize YouTube channel URLs
+        fetch_url = normalize_youtube_url(podcast.url)
+
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "writethumbnail": True,
+            "outtmpl": output_path,
+            # Convert to jpg for compatibility
+            "postprocessors": [{
+                "key": "FFmpegThumbnailsConvertor",
+                "format": "jpg",
+            }],
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(fetch_url, download=True)
+
+            if info is None:
+                logger.warning(f"No info returned for thumbnail: {podcast.name}")
+                return None
+
+            # yt-dlp saves as .jpg after conversion
+            thumbnail_path = f"{output_path}.jpg"
+            if os.path.exists(thumbnail_path):
+                logger.info(f"Downloaded thumbnail for {podcast.name}")
+                return f"{podcast.slug}.jpg"
+
+            # Check for other formats
+            for ext in [".webp", ".png", ".jpg"]:
+                path = f"{output_path}{ext}"
+                if os.path.exists(path):
+                    logger.info(f"Downloaded thumbnail for {podcast.name}")
+                    return f"{podcast.slug}{ext}"
+
+            logger.warning(f"Thumbnail file not found for {podcast.name}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error downloading thumbnail for {podcast.name}: {e}")
+        return None

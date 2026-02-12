@@ -38,6 +38,12 @@ def generate_podcast_feed(podcast: Podcast, episodes: list[Episode]) -> str:
     fg.podcast.itunes_category("Technology")
     fg.podcast.itunes_explicit("no")
 
+    # Podcast artwork/thumbnail
+    if podcast.thumbnail_file:
+        image_url = f"{settings.base_url}/thumbnails/{podcast.thumbnail_file}"
+        fg.image(url=image_url, title=podcast.name, link=settings.base_url)
+        fg.podcast.itunes_image(image_url)
+
     # Add episodes
     for episode in episodes:
         if episode.status != EpisodeStatus.COMPLETED:

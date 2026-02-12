@@ -355,6 +355,27 @@ async def get_episode(podcast_slug: str, filename: str):
     return FileResponse(file_path, media_type="audio/mpeg")
 
 
+@app.api_route("/thumbnails/{filename}", methods=["GET", "HEAD"])
+async def get_thumbnail(filename: str):
+    """Serve a podcast thumbnail image."""
+    file_path = os.path.join(settings.processed_dir, "thumbnails", filename)
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Thumbnail not found")
+
+    # Determine media type from extension
+    ext = os.path.splitext(filename)[1].lower()
+    media_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }
+    media_type = media_types.get(ext, "image/jpeg")
+
+    return FileResponse(file_path, media_type=media_type)
+
+
 # --- Logs ---
 
 

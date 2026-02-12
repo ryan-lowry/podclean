@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models import Podcast, Episode, EpisodeStatus, PodcastType, Settings
-from app.downloader import get_episode_list, download_episode, get_youtube_video_id
+from app.downloader import get_episode_list, download_episode, get_youtube_video_id, download_podcast_thumbnail
 from app.transcriber import transcribe_audio, save_transcript
 from app.ad_detector import detect_ads, calculate_ad_stats
 from app.audio_processor import remove_segments, cleanup_original
@@ -44,6 +44,14 @@ async def process_podcast(
     logger.info(f"Processing podcast: {podcast.name}")
     update_status(f"Processing: {podcast.name}")
     processed_count = 0
+
+    # Download podcast thumbnail if not already present
+    if not podcast.thumbnail_file:
+        update_status(f"Downloading thumbnail: {podcast.name}")
+        thumbnail = download_podcast_thumbnail(podcast)
+        if thumbnail:
+            podcast.thumbnail_file = thumbnail
+            await db.commit()
 
     # Get download check limit from database settings
     download_check_limit = await Settings.get_int(db, "download_check_limit")

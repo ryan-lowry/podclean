@@ -32,6 +32,7 @@ class Podcast(Base):
     url: Mapped[str] = mapped_column(Text)
     podcast_type: Mapped[PodcastType] = mapped_column(SQLEnum(PodcastType))
     enabled: Mapped[bool] = mapped_column(default=True)
+    thumbnail_file: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
